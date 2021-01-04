@@ -1,0 +1,33 @@
+(defclass date ()
+  ((year           :type integer)
+   (month          :type integer)
+   (day            :type integer)
+   (hour           :type integer)
+   (minute         :type integer)
+   (second         :type integer)
+   (has-time-p     :type boolean)))
+
+(defclass commodity ()
+  ((name           :type string)))
+
+(defclass simple-amount ()
+  ((quantity       :type rational)
+   (commodity      :type commodity)))
+
+(defclass amount ()
+  ((base           :type simple-amount)
+   (value          :type amount)
+   (fixed-value-p  :type boolean)
+   (price          :type amount)
+   (fixed-price-p  :type boolean)))
+
+(defclass posting ()
+  ((amount         :type amount)
+   (account        :type string)))
+
+(defclass transaction ()
+  ((date           :type date)
+   (postings       :type list)
+   (memo           :type string)
+   (cleared        :type bool)
+   (clear-date     :type string)))

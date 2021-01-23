@@ -15,29 +15,69 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with lledger.  If not, see <https://www.gnu.org/licenses/>.
 
-(defclass graph-data ())
+(defpackage graph
+  (:use    "COMMON-LISP")
+  (:export "WEIGHTED-DIR-GRAPH"
+	   "UNWEIGHTED-DIR-GRAPH"
+	   "WEIGHTED-UND-GRAPH"
+	   "UNWEIGHTED-UND-GRAPH"
+	   "ADJACENT-P"
+	   "NEIGHBORS"
+	   "ADD-VERTEX"
+	   "ADD-EDGE"
+	   "REMOVE-VERTEX"
+	   "REMOVE-EDGE"
+	   "VERTEX-VALUE"
+	   "EDGE-VALUE"))
+
+(in-package graph)
+
+(defclass graph-data ()
+  ())
 
 (defclass adjacency-matrix (graph-data)
   ((matrix
     :type    array
-    :initarg matrix)))
+    :initarg :matrix)))
 
 (defclass incidence-matrix (graph-data)
   ((matrix
     :type    array
-    :initarg matrix)))
+    :initarg :matrix)
+   (n-edges
+    :type    fixnum
+    :initarg :n-edges)))
 
 (defclass adjacency-list (graph-data)
-  ((list
+  ((vertices
     :type     list
     :initform nil
-    :initarg  :list)))
+    :initarg  :vertices)))
+
+(defclass vertex ()
+  ((value
+    :type t)
+   (outgoing-edges
+    :type list
+    :initform nil)
+   (index
+    :type fixnum)))
+
+(defclass edge ()
+  ((final-edge
+    :type vertex
+    :initarg :final-edge)
+   (weight
+    :type t
+    :initarg :weight)))
 
 (defclass graph ()
   ((graph-data
-    :type     graph-data)
+    :type     graph-data
+    :initarg  :data)
    (vertex-values
-    :type     (or null array))
+    :type     (or null array)
+    :initform nil)
    (n-vertices
     :type     (integer 0 *)
     :initform 0)
@@ -47,11 +87,9 @@
    (resize-size
     :type     (rational 1 *)
     :initarg  :resize-size))
-  ((:documentation
-    "Generic graph class for weighted, directed, or undirected graphs. All graphs may have values associated with the vertices, but only weighted graphs may have (integer) values associated with the edges. Graphs may be represented by an adjacency matrix, an incidence matrix, or an adjacency list. The :SIZE and :RESIZE-SIZE arguments work like the :SIZE and :REHASH-SIZE arguments to MAKE-HASH-TABLE if the graph is represented by a matrix. They are ignored if the graph is represented by an adjacency list.")
-   (:default-initargs
-       (:size 10)
-       (:resize-size 2))))
+  (:documentation
+   "Generic graph class. Graphs may be weighted or unweighted (on the edges) and directed or undirected. All graphs may have values associated with the vertices, but only weighted graphs may have values associated with the edges. Graphs may be represented by an adjacency matrix, an incidence matrix, or an adjacency list. The :SIZE and :RESIZE-SIZE arguments work like the :SIZE and :REHASH-SIZE arguments to MAKE-HASH-TABLE if the graph is represented by a matrix. They are ignored if the graph is represented by an adjacency list. If a weighted graph is represented by a matrix, it may only have integer values associated with the edges.")
+  (:default-initargs :size 10 :resize-size 2))
 
 (defgeneric adjacent-p (graph index-a index-b)
   (:documentation "Tests whether there is an edge from the vertex indexed by INDEX-A to that indexed by INDEX-B in GRAPH"))
@@ -74,14 +112,78 @@
 (defgeneric vertex-value (graph index)
   (:documentation "Returns the value associated with the vertex indexed by INDEX in GRAPH."))
 
-(defgeneric set-vertex-value (graph index value)
-  (:documentation "Sets the value of the vertex indexed by INDEX in GRAPH to VALUE."))
-
 (defclass undirected-graph (graph)
+  ())
+
+(defclass directed-graph (graph)
   ())
 
 (defclass weighted-graph (graph)
   ())
 
-(defclass directed-graph (graph)
+(defclass unweighted-graph (graph)
   ())
+
+(defgeneric edge-value (graph index-a index-b)
+  (:documentation "Returns the value associated with the edge from the vertex indexed by INDEX-A to that indexed by INDEX-B in the weighted graph GRAPH. It is zero if there is no such edge."))
+
+;;; The following are the only classes that should be used by code outside of this file.
+
+(defclass weighted-dir-graph (weighted-graph directed-graph)
+  ())
+
+(defclass unweighted-dir-graph (unweighted-graph directed-graph)
+  ())
+
+(defclass weighted-und-graph (weighted-graph undirected-graph)
+  ())
+
+(defclass unweighted-und-graph (unweighted-graph undirected-graph)
+  ())
+
+(defun make-empty-graph-data (&key
+			  (size 10)
+			  (representation :adjacency-matrix)
+			  (weighted-p nil))
+  (ecase representation
+    (:adjacency-matrix
+     (make-instance 'adjacency-matrix
+		    :matrix (make-array (list size size)
+					:element-type (if weighted-p
+							  'integer
+							  'bit)
+					:initial-element 0
+					:adjustable t)))
+    (:incidence-matrix
+     (make-instance 'incidence-matrix
+		    :matrix (make-array (list size size)
+					:element-type (if weighted-p
+							  'integer
+							  'bit)
+					:initial-element 0
+					:adjustable t)
+		    :n-edges 0))
+    (:adjacency-list
+     (make-instance 'adjacency-list
+		    :vertices nil))))
+
+(defun make-empty-graph (&key (size 10)
+			   (resize-size 2)
+			   (representation :adjacency-matrix)
+			   (weighted-p nil)
+			   (directed-p nil))
+  (let ((empty-data (make-empty-graph-data :size           size
+					   :representation representation
+					   :weighted-p     weighted-p)))
+    (make-instance (cond
+		     ((and weighted-p directed-p)
+		      'weighted-dir-graph)
+		     ((and (not weighted-p) directed-p)
+		      'unweighted-dir-graph)
+		     ((and weighted-p (not directed-p))
+		      'weighted-und-graph)
+		     ((and (not weighted-p) (not directed-p))
+		      'unweighted-und-graph))
+		   :size size
+		   :resize-size resize-size
+		   :data empty-data)))

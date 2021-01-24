@@ -37,36 +37,43 @@
 
 (defclass adjacency-matrix (graph-data)
   ((matrix
-    :type    array
-    :initarg :matrix)))
+    :type     array
+    :initarg  :matrix
+    :accessor matrix)))
 
 (defclass incidence-matrix (graph-data)
   ((matrix
-    :type    array
-    :initarg :matrix)
+    :type     array
+    :initarg  :matrix
+    :accessor matrix)
    (n-edges
-    :type    fixnum
-    :initarg :n-edges)))
+    :type     fixnum
+    :initarg  :n-edges
+    :accessor n-edges)))
 
 (defclass adjacency-list (graph-data)
   ((vertices
     :type     list
     :initform nil
-    :initarg  :vertices)))
+    :initarg  :vertices
+    :accessor vertices)))
 
 (defclass vertex ()
   ((value
-    :type t)
+    :type     t)
    (outgoing-edges
-    :type list
-    :initform nil)
+    :type     list
+    :initform nil
+    :accessor outgoing-edges)
    (index
-    :type fixnum)))
+    :type     fixnum
+    :accessor index)))
 
 (defclass edge ()
-  ((final-edge
-    :type vertex
-    :initarg :final-edge)
+  ((end-vertex
+    :type     vertex
+    :initarg  :end-vertex
+    :accessor end-vertex)
    (weight
     :type t
     :initarg :weight)))
@@ -74,12 +81,14 @@
 (defclass graph ()
   ((graph-data
     :type     graph-data
+    :accessor graph-data
     :initarg  :data)
    (vertex-values
     :type     (or null array)
     :initform nil)
    (n-vertices
     :type     (integer 0 *)
+    :accessor n-vertices
     :initform 0)
    (size
     :type     (integer 0 *)
@@ -187,3 +196,91 @@
 		   :size size
 		   :resize-size resize-size
 		   :data empty-data)))
+
+(defmethod adjacent-p :around ((graph graph) index-a index-b)
+  (and (< index-a (n-vertices graph))
+       (< index-b (n-vertices graph))
+       (call-next-method)))
+
+(defmethod adjacent-p ((graph graph) index-a index-b)
+  (assert (typep (graph-data graph) 'adjacency-list))
+  (dolist (edge (outgoing-edges (find-vertex graph index-a)) nil)
+    (when (= (index (end-vertex edge)) index-b)
+      (return t))))
+
+(defmethod adjacent-p ((graph undirected-graph) index-a index-b)
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (adjacency-matrix
+       (= (bit (matrix data) index-a index-b) 1))
+      (incidence-matrix
+       (dotimes (i (n-edges (graph-data graph)))
+	 (when (and (= (bit (matrix data) index-a i) 1)
+		    (= (bit (matrix data) index-b i) 1))
+	   (return t))))
+      (adjacency-list
+       (call-next-method)))))
+
+(defmethod adjacent-p ((graph directed-graph) index-a index-b)
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (adjacency-matrix
+       (= (aref (matrix data) index-a index-b) 1))
+      (incidence-matrix
+       (dotimes (i (n-edges (graph-data graph)))
+	 (when (and (= (aref (matrix data) index-a i) -1)
+		    (= (aref (matrix data) index-b i) 1))
+	   (return t))))
+      (adjacency-list
+       (call-next-method)))))
+
+(defmethod neighbors :around ((graph graph) index)
+  (assert (< index (n-vertices graph)))
+  (call-next-method))
+
+(defmethod neighbors ((graph graph) index)
+  (assert (typep (graph-data graph) 'adjacency-list))
+  (let ((vertex (find-vertes graph index)))
+    (loop :for edge :in (outgoing-edges vertex)
+       :collect (index (end-vertex edge)))))
+
+(defmethod neighbors ((graph undirected-graph) index)
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (adjacency-matrix
+       (loop :for i :below (n-vertices graph)
+	  :if (= (bit (matrix data) index i) 1)
+	  :collect i))
+      (incidence-matrix
+       (loop :for i :below (n-edges data)
+	  :if (= (bit (matrix data) index i) 1)
+	  :accumulate (or (loop :for j :below index
+			     :if (= (bit (matrix data) j i) 1)
+			     :return j)
+			  (loop :for j :from (+ index 1) :to (n-vertices graph)
+			     :if (= (bit (matrix data) j i) 1)
+			     :return j)
+			  index)))
+      (adjacency-list
+       (call-next-method)))))		       
+		   
+(defmethod neighbors ((graph directed-graph) index)
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (adjacency-matrix
+       (loop :for i :below (n-vertices graph)
+	  :if (= (aref (matrix data) index i) 1)
+	  :collect i))
+      (incidence-matrix
+       (loop :for i :below (n-edges data)
+	  :if (= (aref (matrix data) index i) -1)
+	  :accumulate (or (loop :for j :below index
+			     :if (= (aref (matrix data) j i) 1)
+			     :return j)
+			  (loop :for j :from (+ index 1) :to (n-vertices graph)
+			     :if (= (aref (matrix data) j i) 1)
+			     :return j)
+			  index)))
+      (adjacency-list
+       (call-next-method)))))
+

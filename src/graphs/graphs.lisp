@@ -35,21 +35,32 @@
 (defclass graph-data ()
   ())
 
-(defclass adjacency-matrix (graph-data)
-  ((matrix
-    :type     array
-    :initarg  :matrix
-    :accessor matrix)))
-
-(defclass incidence-matrix (graph-data)
+(defclass matrix-data (graph-data)
   ((matrix
     :type     array
     :initarg  :matrix
     :accessor matrix)
-   (n-edges
+   (vertex-values
+    :type     (vector fixnum)
+    :initarg  :vertex-values
+    :accessor vertex-values)
+   (vertex-values-assigned-p
+    :type    (vector bit)
+    :initarg  :vertex-values-assigned-p
+    :accessor vertex-values-assigned-p)))
+
+(defclass adjacency-matrix (matrix-data)
+  ())
+
+(defclass incidence-matrix (matrix-data)
+  ((n-edges
     :type     fixnum
     :initarg  :n-edges
-    :accessor n-edges)))
+    :accessor n-edges)
+   (size-edges
+    :type     fixnum
+    :initarg  :size-edges
+    :accessor size-edges)))
 
 (defclass adjacency-list (graph-data)
   ((vertices
@@ -60,14 +71,20 @@
 
 (defclass vertex ()
   ((value
-    :type     t)
+    :type     t
+    :initform nil
+    :initarg  :value)
+   (value-assigned-p
+    :type     boolean
+    :initarg  :value-assigned-p)
    (outgoing-edges
     :type     list
     :initform nil
     :accessor outgoing-edges)
    (index
     :type     fixnum
-    :accessor index)))
+    :accessor index
+    :initarg  :index)))
 
 (defclass edge ()
   ((end-vertex
@@ -83,19 +100,18 @@
     :type     graph-data
     :accessor graph-data
     :initarg  :data)
-   (vertex-values
-    :type     (or null array)
-    :initform nil)
    (n-vertices
     :type     (integer 0 *)
     :accessor n-vertices
     :initform 0)
    (size
     :type     (integer 0 *)
-    :initarg  :size)
+    :initarg  :size
+    :accessor size)
    (resize-size
     :type     (rational 1 *)
-    :initarg  :resize-size))
+    :initarg  :resize-size
+    :accessor resize-size))
   (:documentation
    "Generic graph class. Graphs may be weighted or unweighted (on the edges) and directed or undirected. All graphs may have values associated with the vertices, but only weighted graphs may have values associated with the edges. Graphs may be represented by an adjacency matrix, an incidence matrix, or an adjacency list. The :SIZE and :RESIZE-SIZE arguments work like the :SIZE and :REHASH-SIZE arguments to MAKE-HASH-TABLE if the graph is represented by a matrix. They are ignored if the graph is represented by an adjacency list. If a weighted graph is represented by a matrix, it may only have integer values associated with the edges.")
   (:default-initargs :size 10 :resize-size 2))
@@ -162,7 +178,15 @@
 							  'integer
 							  'bit)
 					:initial-element 0
-					:adjustable t)))
+					:adjustable t)
+		    :vertex-values (make-array size
+					       :element-type 'fixnum
+					       :initial-element 0
+					       :adjustable t)
+		    :vertex-values-assigned-p (make-array size
+							  :element-type 'bit
+							  :initial-element 0
+							  :adjustable t)))
     (:incidence-matrix
      (make-instance 'incidence-matrix
 		    :matrix (make-array (list size size)
@@ -171,7 +195,16 @@
 							  'bit)
 					:initial-element 0
 					:adjustable t)
-		    :n-edges 0))
+		    :n-edges 0
+		    :size-edges size
+		    :vertex-values (make-array size
+					       :element-type 'fixnum
+					       :initial-element 0
+					       :adjustable t)
+		    :vertex-values-assigned-p (make-array size
+							  :element-type 'bit
+							  :initial-element 0
+							  :adjustable t)))
     (:adjacency-list
      (make-instance 'adjacency-list
 		    :vertices nil))))
@@ -197,13 +230,17 @@
 		   :resize-size resize-size
 		   :data empty-data)))
 
+(defmethod find-vertex ((graph graph) index)
+  (check-type (graph-data graph) adjacency-list)
+  (nth (- (length (vertices (graph-data graph))) index 1) (vertices (graph-data graph))))
+
 (defmethod adjacent-p :around ((graph graph) index-a index-b)
   (and (< index-a (n-vertices graph))
        (< index-b (n-vertices graph))
        (call-next-method)))
 
 (defmethod adjacent-p ((graph graph) index-a index-b)
-  (assert (typep (graph-data graph) 'adjacency-list))
+  (check-type (graph-data graph) adjacency-list)
   (dolist (edge (outgoing-edges (find-vertex graph index-a)) nil)
     (when (= (index (end-vertex edge)) index-b)
       (return t))))
@@ -239,8 +276,8 @@
   (call-next-method))
 
 (defmethod neighbors ((graph graph) index)
-  (assert (typep (graph-data graph) 'adjacency-list))
-  (let ((vertex (find-vertes graph index)))
+  (check-type (graph-data graph) adjacency-list)
+  (let ((vertex (find-vertex graph index)))
     (loop :for edge :in (outgoing-edges vertex)
        :collect (index (end-vertex edge)))))
 
@@ -254,13 +291,13 @@
       (incidence-matrix
        (loop :for i :below (n-edges data)
 	  :if (= (bit (matrix data) index i) 1)
-	  :accumulate (or (loop :for j :below index
-			     :if (= (bit (matrix data) j i) 1)
-			     :return j)
-			  (loop :for j :from (+ index 1) :to (n-vertices graph)
-			     :if (= (bit (matrix data) j i) 1)
-			     :return j)
-			  index)))
+	  :collect (or (loop :for j :below index
+			  :if (= (bit (matrix data) j i) 1)
+			  :return j)
+		       (loop :for j :from (+ index 1) :to (n-vertices graph)
+			  :if (= (bit (matrix data) j i) 1)
+			  :return j)
+		       index)))
       (adjacency-list
        (call-next-method)))))		       
 		   
@@ -274,13 +311,143 @@
       (incidence-matrix
        (loop :for i :below (n-edges data)
 	  :if (= (aref (matrix data) index i) -1)
-	  :accumulate (or (loop :for j :below index
-			     :if (= (aref (matrix data) j i) 1)
-			     :return j)
-			  (loop :for j :from (+ index 1) :to (n-vertices graph)
-			     :if (= (aref (matrix data) j i) 1)
-			     :return j)
-			  index)))
+	  :collect (or (loop :for j :below index
+			  :if (= (aref (matrix data) j i) 1)
+			  :return j)
+		       (loop :for j :from (+ index 1) :to (n-vertices graph)
+			  :if (= (aref (matrix data) j i) 1)
+			  :return j)
+		       index)))
       (adjacency-list
        (call-next-method)))))
 
+(defmethod vertex-value :around ((graph graph) index)
+  (check-type index fixnum)
+  (assert (< index (n-vertices graph)))
+  (call-next-method))
+
+(defmethod vertex-value ((graph graph) index)
+  (let ((data (graph-data graph)))
+    (etypecase (graph-data graph)
+      (matrix-data
+       (values (aref (vertex-values data) index)
+	       (= (bit (vertex-values-assigned-p data) index) 1)))
+      (adjacency-list
+       (values (slot-value (find-vertex graph index) 'value)
+	       (slot-value (find-vertex graph index) 'value-assigned-p))))))
+
+(defmethod (setf vertex-value) :around (vertex-value (graph graph) index)
+  (check-type index fixnum)
+  (call-next-method))
+
+(defmethod (setf vertex-value) (vertex-value (graph graph) index)
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (matrix-data
+       (check-type vertex-value fixnum)
+       (setf (bit  (vertex-values-assigned-p data) index) 1)
+       (setf (aref (vertex-values data) index) vertex-value))
+      (adjacency-list
+       (setf (slot-value (find-vertex graph index) 'value) vertex-value)
+       (setf (slot-value (find-vertex graph index) 'value-assigned-p) t)))
+    vertex-value))
+
+(defmethod add-vertex :around ((graph graph) &optional value)
+  (when (not (typep (graph-data graph) 'adjacency-list))
+    (check-type value (or integer null)))
+  (call-next-method))
+
+(defmethod add-vertex ((graph graph) &optional (value nil val-supplied-p))
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (matrix-data
+       (let ((index (n-vertices graph)))
+	 (when (<= (size graph) index)
+	   (let ((new-size (ceiling (* (size graph) (resize-size graph)))))
+	     (adjust-array (matrix data)
+			   (list new-size
+				 (etypecase data
+				   (adjacency-matrix
+				    new-size)
+				   (incidence-matrix
+				    (size-edges data))))
+			   :initial-element 0)
+	     (adjust-array (vertex-values data)
+			   new-size
+			   :initial-element 0)
+	     (adjust-array (vertex-values-assigned-p data)
+			   new-size
+			   :initial-element 0)
+	     (setf (size graph) new-size)))
+	 (when val-supplied-p
+	   (setf (vertex-value graph index) value))
+	 index))
+      (adjacency-list
+       (let ((index (if (vertices data)
+			(1+ (index (first (vertices data))))
+			0)))
+	 (push (make-instance 'vertex
+			      :index index
+			      :value value
+			      :value-assigned-p val-supplied-p)
+	       (vertices data))
+	 index)))))
+
+(defmethod add-vertex :after ((graph graph) &optional value)
+  (declare (ignore value))
+  (incf (n-vertices graph)))
+
+(defmethod add-edge :around ((graph graph) index-a index-b &optional (weight 1 weight-supplied-p))
+  (if weight-supplied-p
+      (check-type graph weighted-graph)
+      (check-type graph unweighted-graph))
+  (assert (and (< index-a (n-vertices graph)) (< index-b (n-vertices graph))))
+  (call-next-method))
+
+(defmethod add-edge ((graph directed-graph) index-a index-b &optional (weight 1))
+  (declare (ignore weight))
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (adjacency-matrix
+       (if (= index-a index-b)
+	   (setf (aref (matrix graph) index-a index-b) weight)
+	   (progn
+	     (setf (aref (matrix graph) index-a index-b) weight)
+	     (setf (aref (matrix graph) index-b index-a) (- weight))))
+       (call-next-method))
+      (incidence-matrix
+       (when (<= (size-edges data) (n-edges data))
+	 (adjust-array (matrix data) (list (n-vertices graph)
+					   (ceiling (* (resize-size graph) (size-edges data)))))
+	 (setf (size-edges data) (ceiling (* (resize-size graph) (size-edges data)))))
+       (let ((index (n-edges data)))
+	 (setf (aref (matrix data) index-a index) (- weight))
+	 (setf (aref (matrix data) index-b index) weight))
+       (incf (n-edges data))
+       (call-next-method))
+      (adjacency-list
+       (call-next-method)))))
+
+(defmethod add-edge ((graph undirected-graph) index-a index-b &optional weight)
+  (declare (ignore weight))
+  (let ((data (graph-data graph)))
+    (etypecase data
+      (adjacency-matrix
+       (setf (bit (matrix graph) index-a index-b) 1)
+       (setf (bit (matrix graph) index-b index-a) 1)
+       (call-next-method))
+      (incidence-matrix
+       (when (<= (size-edges data) (n-edges data))
+	 (adjust-array (matrix data) (list (n-vertices graph)
+					   (ceiling (* (resize-size graph) (size-edges data)))))
+	 (setf (size-edges data) (ceiling (* (resize-size graph) (size-edges data)))))
+       (let ((index (n-edges data)))
+	 (setf (bit (matrix data) index-a index) 1)
+	 (setf (bit (matrix data) index-b index) 1))
+       (incf (n-edges data))
+       (call-next-method))
+      (adjacency-list
+       (call-next-method)))))
+
+(defmethod add-edge ((graph weighted-graph) index-a index-b)
+ 

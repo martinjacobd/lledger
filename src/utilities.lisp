@@ -1,3 +1,5 @@
+(in-package #:lledger)
+
 (defmacro aif (if then &optional else)
   `(let ((it ,if))
      (if it

@@ -15,7 +15,7 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with lledger.  If not, see <https://www.gnu.org/licenses/>.
 
-(in-package #:lledger)
+(in-package #:cl-lledger)
 
 (defclass quantity ()
   ()
@@ -85,6 +85,30 @@
   (make-instance 'balance
 		 :debit-balance  (mapcar #'quantity-copy (balance-credit-balance quantity))
 		 :credit-balance (mapcar #'quantity-copy (balance-credit-balance quantity))))
+
+(defgeneric negate (quantity)
+  (:documentation "Returns a new quantity of the same type as QUANTITY with the amount or amounts negated, preserving the TYPE characteristic, if any."))
+
+(defmethod negate ((quantity amount))
+  (make-instance 'amount
+		 :commodity (amount-commodity quantity)
+		 :value     (- (amount-value  quantity))))
+
+(defmethod negate ((quantity posting-amount))
+  (make-instance 'posting-amount
+		 :commodity (amount-commodity    quantity)
+		 :value     (- (amount-value     quantity))
+		 :type      (posting-amount-type quantity)))
+
+(defmethod negate ((quantity simple-balance))
+  (make-instance 'simple-balance
+		 :type (simple-balance-type quantity)
+		 :amounts (mapcar #'negate (simple-balance-amounts quantity))))
+
+(defmethod negate ((quantity balance))
+  (make-instance 'balance
+		 :credit-balance (mapcar #'negate (balance-credit-balance quantity))
+		 :debit-balance  (mapcar #'negate (balance-debit-balance  quantity))))
 
 (defgeneric plus (quantity-a quantity-b)
   (:documentation "Adds together two quantities. If QUANTITY-A and QUANTITY-B are both of type AMOUNT and have the same COMMODITY, then an AMOUNT of that commodity is returned. If they have differing commodities, then a SIMPLE-BALANCE of TYPE nil is returned with QUANTITY-A and QUANTITY-B copied to the AMOUNTS slot. If QUANTITY-A and QUANTITY-B are both of type POSTING-AMOUNT and have the same COMMODITY, then a POSTING-AMOUNT of that commodity is returned, with TYPE being either :DEBIT or :CREDIT depending on which allows the returned amount to have a positive value (or the TYPE of QUANTITY-A in the case they cancel). A SIMPLE-BALANCE and AMOUNT or POSTING-AMOUNT add together as you might expect, with quantities of the same commodity condensed appropriately. It is, however, an error for a POSTING-AMOUNT and SIMPLE-BALANCE of different TYPE to be added together. Similarly, a BALANCE and a SIMPLE-BALANCE add as expected, as do a BALANCE and POSTING-AMOUNT. It is an error for a BALANCE to be added to an AMOUNT that is not a POSTING-AMOUNT."))
@@ -196,7 +220,7 @@
 	(amount            (gensym)))
     `(let ((,amounts-to-remove nil))
        (dolist (,amount ,list-b)
-	 (let ((,matching-amount (find (amount-commodity ,matching-amount) ,list-a :key #'amount-commodity)))
+	 (let ((,matching-amount (find (amount-commodity ,amount) ,list-a :key #'amount-commodity)))
 	   (if ,matching-amount
 	       (if (= (+ (amount-value ,amount)
 			 (amount-value ,matching-amount))
@@ -378,6 +402,47 @@
 (defmethod plus ((quantity-a amount) (quantity-b balance))
   (plus quantity-b quantity-a))
 
+(defgeneric minus (quantity-a quantity-b)
+  (:documentation "Returns a quantity which is the result of subtracting QUANTITY-B from QUANTITY-A. Rules for the acceptable combinations of types of QUANTITY-A and QUANTITY-B are the same as those of PLUS."))
+
+(defmethod minus ((quantity-a quantity) (quantity-b quantity))
+  (plus quantity-a (negate quantity-b)))
+
+(defgeneric times (quantity factor)
+  (:documentation "Returns a new quantity of the same kind as QUANTITY with all of its amounts multiplied by FACTOR, which may be any non-imaginary number."))
+
+(defmethod times :around ((quantity quantity) factor)
+  (check-type factor (and number (not complex)))
+  (call-next-method))
+
+(defmethod times ((quantity amount) factor)
+  (make-instance 'amount
+		 :commodity (amount-commodity quantity)
+		 :value (rationalize (* factor (amount-value quantity)))))
+
+(defmethod times ((quantity posting-amount) factor)
+  (make-instance 'posting-amount
+		 :commodity (amount-commodity quantity)
+		 :value (rationalize (* factor (amount-value quantity)))
+		 :type (posting-amount-type quantity)))
+
+(defmethod times ((quantity simple-balance) factor)
+  (make-instance 'simple-balance
+		 :type (simple-balance-type quantity)
+		 :amounts (mapcar #'(lambda (amount)
+				      (times amount factor))
+				  (simple-balance-amounts quantity))))
+
+(defmethod times ((quantity balance) factor)
+  (make-instance 'balance
+		 :credit-balance (mapcar #'(lambda (amount)
+					     (times amount factor))
+					 (balance-credit-balance quantity))
+		 :debit-balance  (mapcar #'(lambda (amount)
+					     (times amount factor))
+					 (balance-debit-balance quantity))))
+
+
 (defgeneric balance-incf (augend addend)
   (:documentation "Broadly similar to PLUS, except the AUGEND must be either a BALANCE or SIMPLE-BALANCE, and it is destructively modified. This is for keeping track of running totals. Note that the order of arguments matters here, as well as the fact that the addend cannot be a BALANCE if AUGEND is a SIMPLE-BALANCE. The other combinations outlined in (documentation #'PLUS 'function), however, work, provided that the balance or simple-balance is the AUGEND."))
 
@@ -423,6 +488,12 @@
 (defmethod balance-incf ((augend balance) (addend balance))
   (amount-lists-addf (balance-credit-balance augend) (balance-credit-balance addend))
   (amount-lists-addf (balance-debit-balance  augend) (balance-debit-balance  addend)))
+
+(defgeneric balance-decf (minuend subtrahend)
+  (:documentation "Destructively subtracts the SUBTRAHEND from the MINUEND. Rules for the acceptable types are the same as those of BALANCE-INCF."))
+
+(defmethod balance-decf ((minuend quantity) (subtrahend quantity))
+  (balance-incf minuend (negate subtrahend)))
 
 (defgeneric balance-total (balance &optional positive-type)
   (:documentation "Calculates the total balance of BALANCE. It calculates debits - credits if POSITIVE-TYPE is :DEBIT and credits - debits if POSITIVE-TYPE is :CREDIT. POSITIVE-TYPE is assumed to be :DEBIT if not provided, just as in ledger-cli. A SIMPLE-BALANCE is returned with TYPE POSITIVE-TYPE and AMOUNTS as outlined above."))

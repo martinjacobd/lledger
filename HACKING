@@ -1,0 +1,3 @@
+lledger consists of two parts: cl-lledger, a common lisp package for general bookkeeping and basic finance tasks and lledger-cli, a standalone program that uses cl-lledger to process files in the ledger file format.
+
+In cl-lledger, there is a utilities file that contains small utility functions I find useful. The rest of the code is written in this 'language,' so you must be familiar with the small functions in it to read the code, for which I apologize. I especially seem to like the "anaphoric" macros like AIF, which I stole from *On Lisp*. Next, the code which deals with commodities and items is in "commodities.lisp".

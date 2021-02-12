@@ -86,31 +86,31 @@
 		 :debit-balance  (mapcar #'quantity-copy (balance-credit-balance quantity))
 		 :credit-balance (mapcar #'quantity-copy (balance-credit-balance quantity))))
 
-(defgeneric negate (quantity)
+(defgeneric quantity-negate (quantity)
   (:documentation "Returns a new quantity of the same type as QUANTITY with the amount or amounts negated, preserving the TYPE characteristic, if any."))
 
-(defmethod negate ((quantity amount))
+(defmethod quantity-negate ((quantity amount))
   (make-instance 'amount
 		 :commodity (amount-commodity quantity)
 		 :value     (- (amount-value  quantity))))
 
-(defmethod negate ((quantity posting-amount))
+(defmethod quantity-negate ((quantity posting-amount))
   (make-instance 'posting-amount
 		 :commodity (amount-commodity    quantity)
 		 :value     (- (amount-value     quantity))
 		 :type      (posting-amount-type quantity)))
 
-(defmethod negate ((quantity simple-balance))
+(defmethod quantity-negate ((quantity simple-balance))
   (make-instance 'simple-balance
 		 :type (simple-balance-type quantity)
-		 :amounts (mapcar #'negate (simple-balance-amounts quantity))))
+		 :amounts (mapcar #'quantity-negate (simple-balance-amounts quantity))))
 
-(defmethod negate ((quantity balance))
+(defmethod quantity-negate ((quantity balance))
   (make-instance 'balance
-		 :credit-balance (mapcar #'negate (balance-credit-balance quantity))
-		 :debit-balance  (mapcar #'negate (balance-debit-balance  quantity))))
+		 :credit-balance (mapcar #'quantity-negate (balance-credit-balance quantity))
+		 :debit-balance  (mapcar #'quantity-negate (balance-debit-balance  quantity))))
 
-(defgeneric plus (quantity-a quantity-b)
+(defgeneric quantity-plus (quantity-a quantity-b)
   (:documentation "Adds together two quantities. If QUANTITY-A and QUANTITY-B are both of type AMOUNT and have the same COMMODITY, then an AMOUNT of that commodity is returned. If they have differing commodities, then a SIMPLE-BALANCE of TYPE nil is returned with QUANTITY-A and QUANTITY-B copied to the AMOUNTS slot. If QUANTITY-A and QUANTITY-B are both of type POSTING-AMOUNT and have the same COMMODITY, then a POSTING-AMOUNT of that commodity is returned, with TYPE being either :DEBIT or :CREDIT depending on which allows the returned amount to have a positive value (or the TYPE of QUANTITY-A in the case they cancel). A SIMPLE-BALANCE and AMOUNT or POSTING-AMOUNT add together as you might expect, with quantities of the same commodity condensed appropriately. It is, however, an error for a POSTING-AMOUNT and SIMPLE-BALANCE of different TYPE to be added together. Similarly, a BALANCE and a SIMPLE-BALANCE add as expected, as do a BALANCE and POSTING-AMOUNT. It is an error for a BALANCE to be added to an AMOUNT that is not a POSTING-AMOUNT."))
 
 (defun add-amount-lists (list-a list-b)
@@ -231,7 +231,7 @@
 			    (amount-value ,matching-amount))))
 	       (setf ,list-a (cons ,amount ,list-a))))))))
 	
-(defmethod plus ((quantity-a amount) (quantity-b amount))
+(defmethod quantity-plus ((quantity-a amount) (quantity-b amount))
   (if (eql (amount-commodity quantity-a)
 	   (amount-commodity quantity-b))
       (make-instance 'amount
@@ -243,7 +243,7 @@
 		     :amounts (list (quantity-copy quantity-a)
 				    (quantity-copy quantity-b)))))
 
-(defmethod plus ((quantity-a posting-amount) (quantity-b posting-amount))
+(defmethod quantity-plus ((quantity-a posting-amount) (quantity-b posting-amount))
   (if (eql (amount-commodity quantity-a)
 	   (amount-commodity quantity-b))
       (if (eql (posting-amount-type quantity-a)
@@ -277,7 +277,7 @@
 			     (list (quantity-copy quantity-a))
 			     (list (quantity-copy quantity-b)))))))
 
-(defmethod plus ((quantity-a posting-amount) (quantity-b amount))
+(defmethod quantity-plus ((quantity-a posting-amount) (quantity-b amount))
   (if (eql (amount-commodity quantity-a)
 	   (amount-commodity quantity-b))
       (make-instance 'posting-amount
@@ -290,10 +290,10 @@
 		     :amounts (list (quantity-copy quantity-a)
 				    (quantity-copy quantity-b)))))
 
-(defmethod plus ((quantity-a amount) (quantity-b posting-amount))
-  (plus quantity-b quantity-a))
+(defmethod quantity-plus ((quantity-a amount) (quantity-b posting-amount))
+  (quantity-plus quantity-b quantity-a))
   
-(defmethod plus ((quantity-a simple-balance) (quantity-b simple-balance))
+(defmethod quantity-plus ((quantity-a simple-balance) (quantity-b simple-balance))
   (assert (not (and (not (eql (simple-balance-type quantity-a)
 			      (simple-balance-type quantity-b)))
 		    (member nil (list (simple-balance-type quantity-a)
@@ -316,7 +316,7 @@
 			 (mapcar #'quantity-copy (simple-balance-amounts quantity-a))
 			 (mapcar #'quantity-copy (simple-balance-amounts quantity-b))))))
 
-(defmethod plus ((quantity-a simple-balance) (quantity-b posting-amount))
+(defmethod quantity-plus ((quantity-a simple-balance) (quantity-b posting-amount))
   (assert (not (eql (simple-balance-type quantity-a) nil))
 	  (quantity-a)
 	  "Cannot add a posting-amount to a simple-balance of type NIL.")
@@ -332,22 +332,22 @@
 			 :debit  (list (quantity-copy quantity-b))
 			 :credit (mapcar #'quantity-copy (simple-balance-amounts quantity-a))))))
 
-(defmethod plus ((quantity-a posting-amount) (quantity-b simple-balance))
-  (plus quantity-b quantity-a))
+(defmethod quantity-plus ((quantity-a posting-amount) (quantity-b simple-balance))
+  (quantity-plus quantity-b quantity-a))
 
-(defmethod plus ((quantity-a simple-balance) (quantity-b amount))
+(defmethod quantity-plus ((quantity-a simple-balance) (quantity-b amount))
   (assert (not (typep quantity-b 'posting-amount))
 	  (quantity-b)
-	  "INTERNAL PACKAGE ERROR: PLUS method not properly combining.")
+	  "INTERNAL PACKAGE ERROR: QUANTITY-PLUS method not properly combining.")
   (make-instance 'simple-balance
 		 :type (simple-balance-type quantity-a)
 		 :amounts (add-amount-to-list quantity-b (simple-balance-amounts quantity-a))))
 
 
-(defmethod plus ((quantity-a amount) (quantity-b simple-balance))
-  (plus quantity-b quantity-a))
+(defmethod quantity-plus ((quantity-a amount) (quantity-b simple-balance))
+  (quantity-plus quantity-b quantity-a))
 
-(defmethod plus ((quantity-a balance) (quantity-b balance))
+(defmethod quantity-plus ((quantity-a balance) (quantity-b balance))
   (make-instance 'balance
 		 :credit-balance
 		 (add-amount-lists (balance-credit-balance quantity-a)
@@ -356,7 +356,7 @@
 		 (add-amount-lists (balance-debit-balance quantity-a)
 				   (balance-debit-balance quantity-b))))
 
-(defmethod plus ((quantity-a balance) (quantity-b simple-balance))
+(defmethod quantity-plus ((quantity-a balance) (quantity-b simple-balance))
   (assert (not (eql (simple-balance-type quantity-b) nil))
 	  (quantity-a quantity-b)
 	  "Cannot add simple-balance of type NIL to balance.")
@@ -372,10 +372,10 @@
 				       (balance-debit-balance quantity-a))
 		     (mapcar #'quantity-copy (balance-debit-balance quantity-a)))))
 
-(defmethod plus ((quantity-a simple-balance) (quantity-b balance))
-  (plus quantity-b quantity-a))
+(defmethod quantity-plus ((quantity-a simple-balance) (quantity-b balance))
+  (quantity-plus quantity-b quantity-a))
 
-(defmethod plus ((quantity-a balance) (quantity-b posting-amount))
+(defmethod quantity-plus ((quantity-a balance) (quantity-b posting-amount))
   (make-instance 'balance
 		 :credit-balance
 		 (if (eql (posting-amount-type quantity-b) :credit)
@@ -388,63 +388,63 @@
 					 (balance-debit-balance quantity-a))
 		     (mapcar #'quantity-copy (balance-debit-balance quantity-a)))))
 
-(defmethod plus ((quantity-a posting-amount) (quantity-b balance))
-  (plus quantity-b quantity-a))
+(defmethod quantity-plus ((quantity-a posting-amount) (quantity-b balance))
+  (quantity-plus quantity-b quantity-a))
 
-(defmethod plus ((quantity-a balance) (quantity-b amount))
+(defmethod quantity-plus ((quantity-a balance) (quantity-b amount))
   ;; since the preceding method doesn't call CALL-NEXT-METHOD,
   ;; we know that quantity-b is not a POSTING-AMOUNT
   (assert (not (typep quantity-b 'posting-amount))
 	  (quantity-b)
-	  "INTERNAL PACKAGE ERROR: methods for PLUS wrongly combined.")
+	  "INTERNAL PACKAGE ERROR: methods for QUANTITY-PLUS wrongly combined.")
   (error "Cannot add an AMOUNT that is not a POSTING-AMOUNT to a BALANCE."))
 
-(defmethod plus ((quantity-a amount) (quantity-b balance))
-  (plus quantity-b quantity-a))
+(defmethod quantity-plus ((quantity-a amount) (quantity-b balance))
+  (quantity-plus quantity-b quantity-a))
 
-(defgeneric minus (quantity-a quantity-b)
-  (:documentation "Returns a quantity which is the result of subtracting QUANTITY-B from QUANTITY-A. Rules for the acceptable combinations of types of QUANTITY-A and QUANTITY-B are the same as those of PLUS."))
+(defgeneric quantity-minus (quantity-a quantity-b)
+  (:documentation "Returns a quantity which is the result of subtracting QUANTITY-B from QUANTITY-A. Rules for the acceptable combinations of types of QUANTITY-A and QUANTITY-B are the same as those of QUANTITY-PLUS."))
 
-(defmethod minus ((quantity-a quantity) (quantity-b quantity))
-  (plus quantity-a (negate quantity-b)))
+(defmethod quantity-minus ((quantity-a quantity) (quantity-b quantity))
+  (quantity-plus quantity-a (quantity-negate quantity-b)))
 
-(defgeneric times (quantity factor)
+(defgeneric quantity-times (quantity factor)
   (:documentation "Returns a new quantity of the same kind as QUANTITY with all of its amounts multiplied by FACTOR, which may be any non-imaginary number."))
 
-(defmethod times :around ((quantity quantity) factor)
+(defmethod quantity-times :around ((quantity quantity) factor)
   (check-type factor (and number (not complex)))
   (call-next-method))
 
-(defmethod times ((quantity amount) factor)
+(defmethod quantity-times ((quantity amount) factor)
   (make-instance 'amount
 		 :commodity (amount-commodity quantity)
 		 :value (rationalize (* factor (amount-value quantity)))))
 
-(defmethod times ((quantity posting-amount) factor)
+(defmethod quantity-times ((quantity posting-amount) factor)
   (make-instance 'posting-amount
 		 :commodity (amount-commodity quantity)
 		 :value (rationalize (* factor (amount-value quantity)))
 		 :type (posting-amount-type quantity)))
 
-(defmethod times ((quantity simple-balance) factor)
+(defmethod quantity-times ((quantity simple-balance) factor)
   (make-instance 'simple-balance
 		 :type (simple-balance-type quantity)
 		 :amounts (mapcar #'(lambda (amount)
-				      (times amount factor))
+				      (quantity-times amount factor))
 				  (simple-balance-amounts quantity))))
 
-(defmethod times ((quantity balance) factor)
+(defmethod quantity-times ((quantity balance) factor)
   (make-instance 'balance
 		 :credit-balance (mapcar #'(lambda (amount)
-					     (times amount factor))
+					     (quantity-times amount factor))
 					 (balance-credit-balance quantity))
 		 :debit-balance  (mapcar #'(lambda (amount)
-					     (times amount factor))
+					     (quantity-times amount factor))
 					 (balance-debit-balance quantity))))
 
 
 (defgeneric balance-incf (augend addend)
-  (:documentation "Broadly similar to PLUS, except the AUGEND must be either a BALANCE or SIMPLE-BALANCE, and it is destructively modified. This is for keeping track of running totals. Note that the order of arguments matters here, as well as the fact that the addend cannot be a BALANCE if AUGEND is a SIMPLE-BALANCE. The other combinations outlined in (documentation #'PLUS 'function), however, work, provided that the balance or simple-balance is the AUGEND."))
+  (:documentation "Broadly similar to QUANTITY-PLUS, except the AUGEND must be either a BALANCE or SIMPLE-BALANCE, and it is destructively modified. This is for keeping track of running totals. Note that the order of arguments matters here, as well as the fact that the addend cannot be a BALANCE if AUGEND is a SIMPLE-BALANCE. The other combinations outlined in (documentation #'QUANTITY-PLUS 'function), however, work, provided that the balance or simple-balance is the AUGEND."))
 
 (defmethod balance-incf ((augend simple-balance) (addend amount))
   (amount-list-incf (simple-balance-amounts augend) addend))
@@ -493,7 +493,7 @@
   (:documentation "Destructively subtracts the SUBTRAHEND from the MINUEND. Rules for the acceptable types are the same as those of BALANCE-INCF."))
 
 (defmethod balance-decf ((minuend quantity) (subtrahend quantity))
-  (balance-incf minuend (negate subtrahend)))
+  (balance-incf minuend (quantity-negate subtrahend)))
 
 (defgeneric balance-total (balance &optional positive-type)
   (:documentation "Calculates the total balance of BALANCE. It calculates debits - credits if POSITIVE-TYPE is :DEBIT and credits - debits if POSITIVE-TYPE is :CREDIT. POSITIVE-TYPE is assumed to be :DEBIT if not provided, just as in ledger-cli. A SIMPLE-BALANCE is returned with TYPE POSITIVE-TYPE and AMOUNTS as outlined above."))

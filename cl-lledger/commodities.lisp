@@ -26,23 +26,29 @@
     :type     string
     :initarg  :note
     :accessor commodity-note)
-   (format
-    :type     (member :american :european)
-    :initarg  :format
-    :accessor commodity-format)
    (prepositive-p
     :type     boolean
     :initarg  :prepositive-p
     :accessor commodity-prepositive-p)
+   (thousands-separator
+    :type     (or character null)
+    :initarg  :thousands-separator
+    :accessor commodity-thousands-separator)
+   (decimal-separator
+    :type     (or character null)
+    :initarg  :decimal-separator
+    :accessor commodity-decimal-separator)
    (ticker
     :type      string
     :initarg   :ticker
     :accessor  commodity-ticker))
   (:documentation "All quantities are specified in terms of a commodity. It may have a descriptive NOTE attached and must have a unique NAME. If FORMAT is :AMERICAN, then the commodity will be printed with periods as decimal separators and commas as thousands-separators such as '$1,000.00'. If :EUROPEAN, it will be in the format more common in mainland Europe '$1.000,00'. PREPOSITIVE-P specifies whether the commodity name comes before or after the quantity it is to represent. Finally, TICKER optionally represents a ticker which has value information for external functions.")
-  (:default-initargs :note          ""
-		     :ticker        ""
-		     :format        :american
-		     :prepositive-p t))
+  (:default-initargs :note                ""
+		     :ticker              ""
+		     :thousands-separator nil
+		     :decimal-separator   nil
+		     :negative-style      :minus-sign
+		     :prepositive-p       t))
 
 (defclass item-class ()
   ((name

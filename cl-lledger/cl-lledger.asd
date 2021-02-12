@@ -15,18 +15,13 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with lledger.  If not, see <https://www.gnu.org/licenses/>.
 
-(defpackage #:cl-lledger
-  (:use    #:cl)
-  (:export #:quantity
-	   #:amount
-	   #:posting-amount
-	   #:simple-balance
-	   #:balance
-	   #:quantity-copy
-	   #:quantity-negate
-	   #:quantity-plus
-	   #:quantity-minus
-	   #:quantity-times
-	   #:balance-incf
-	   #:balance-decf
-	   #:balance-total))
+(defsystem "cl-lledger"
+  :description "hello-lisp: a sample Lisp system."
+  :version "development"
+  :author "Jacob Martin <martinjacobd@gmail.com>"
+  :licence "GPLv3"
+  :depends-on ("cl-ppcre")
+  :components ((:file "package")
+               (:file "utilities")
+               (:file "amounts")
+	       (:file "commodities")))

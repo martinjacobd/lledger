@@ -26,48 +26,59 @@
     :type     string
     :initarg  :note
     :accessor commodity-note)
-   (prepositive-p
-    :type     boolean
-    :initarg  :prepositive-p
-    :accessor commodity-prepositive-p)
+   (display-position
+    :type     (member nil :prepositive :postpositive) 
+    :initarg  :display-position
+    :accessor commodity-display-position)
    (thousands-separator
-    :type     (or character null)
+    :type     (member nil #\, #\.)
     :initarg  :thousands-separator
     :accessor commodity-thousands-separator)
    (decimal-separator
-    :type     (or character null)
+    :type     (member nil #\. #\,)
     :initarg  :decimal-separator
     :accessor commodity-decimal-separator)
+   (negative-style
+    :type     (member nil :minus-sign :parentheses)
+    :initarg  :negative-style
+    :accessor commodity-negative-style)
    (ticker
-    :type      string
-    :initarg   :ticker
-    :accessor  commodity-ticker))
-  (:documentation "All quantities are specified in terms of a commodity. It may have a descriptive NOTE attached and must have a unique NAME. If FORMAT is :AMERICAN, then the commodity will be printed with periods as decimal separators and commas as thousands-separators such as '$1,000.00'. If :EUROPEAN, it will be in the format more common in mainland Europe '$1.000,00'. PREPOSITIVE-P specifies whether the commodity name comes before or after the quantity it is to represent. Finally, TICKER optionally represents a ticker which has value information for external functions.")
-  (:default-initargs :note                ""
-		     :ticker              ""
-		     :thousands-separator nil
-		     :decimal-separator   nil
-		     :negative-style      :minus-sign
-		     :prepositive-p       t))
-
-(defclass item-class ()
-  ((name
     :type     string
-    :initarg  :name
-    :accessor item-class-name)
-   (attributes
+    :initarg  :ticker
+    :accessor commodity-ticker)
+   (valuation-style
+    :type     (member nil :face-value :market-value :cost-basis)
+    :initarg  :valuation-style
+    :accessor commodity-valuation-style)
+   (market-balancing-account
+    :type     (or null account list)
+    :initarg  :balancing-account
+    :accessor commodity-market-balancing-account)
+   (p/l-balancing-account
+    :type     (or null account list)
+    :initarg  :p/l-balancing-account
+    :accessor commodity-p/l-balancing-account))
+  (:documentation "A commodity defines the basic 'unit' of an amount. The NAME is that by which the commodity is known, and a string NOTE may be attached. The next four paramaters are about the display of an amount specified in a commodity. For any of them, they may be unspecified and thus decided situationally according to the principle of subsidiarity.
+
+If DISPLAY-POSITION is :PREPOSITIVE, the name of the commodity is displayed before the numerical amount, for instance. THOUSANDS-SEPARATOR and DECIMAL-SEPARATOR are useful for specifying amounts in the 'European' convention ($1.000,00) or the 'American' one ($1,000.00).
+
+The TICKER slot is useful for specifying that certain commodities might have external names that are useful for modules that download prices from the Internet or similar. (For instance, I might wish to simply call my commodity ozAg but my software to download the prices might prefer for it to be specified as XAGUSD.)
+
+If MARKET-BALANCING-ACCOUNT is specified, that is the account to which discrepancies between the current value and the cost-basis will be posted before those discrepancies are realized. If a list is specified, it must have exactly two elements: The account to which the difference will be posted if it is a credit difference and the account to  which the difference is posted if it is a debit difference. P/L-BALANCING-ACCOUNT is similar to MARKET-BALANCING-ACCOUNT but used when the gains or losses are realized. (Normally, the correct account to which to post this discrepancy is specified in the transaction itself, but it is useful if the commodity often has a difference between the cost and the value. Thus, I may specify that any discrepancies between the cost and the value of silver, for instance, should be posted to the 'EXPENSES:PRECIOUS METALS PREMIUMS' account or similar.)")
+  (:default-initargs :ticker                   ""
+		     :thousands-separator      nil
+		     :decimal-separator        nil
+		     :negative-style           nil
+		     :display-position         nil
+		     :market-balancing-account nil
+		     :p/l-balancing-account    nil))
+
+(defclass item-class (commodity)
+  ((attributes
     :type     list
     :initarg  :attributes
-    :accessor item-class-attributes)
-   (valuation-fn
-    :type     (or null function)
-    :initarg  :valuation-fn
-    :accessor item-class-valuation-fn)
-   (balancing-account
-    :type     (or null account)
-    :initarg  :balancing-account
-    :accessor item-class-valuation-account))
-  (:documentation "Represents a common set of items which share attributes ATTRIBUTES. It optionally has a VALUATION-FN which determines the market value of its member items (if it is not overriden individually) and a BALANCING-ACCOUNT which balances out market valuation fluctuations (if it is not overriden). If these optional slots are not provided, they are ascertained as necessary according to the principle of subsidiarity. Names must be unique.")
+    :accessor item-class-attributes))
+  (:documentation "An ITEM-CLASS is a special kind of commodity which has ATTRIBUTES (a list of strings) a la object orientation. (E.g., I may wish to define a coins ITEM-CLASS to keep track of my coins, where I would keep track of their precious metals content, mintage year, and condition, and use these attributes in a specially-written valuation function.)")
   (:default-initargs :valuation-fn nil :balancing-account nil))
 
 (defclass item ()
@@ -76,7 +87,7 @@
     :initarg  :name
     :accessor item-name)
    (class
-    :type     (or null item-class)
+    :type     item-class
     :initarg  :class
     :accessor item-type)
    (attributes
@@ -84,22 +95,26 @@
     :initarg  :attributes
     :accessor item-attributes)
    (cost
-    :type     amount
+    :type     (or null amount)
     :initarg  :cost
     :accessor item-cost)
-   (valuation-fn
-    :type     (or null function)
-    :initarg  :valuation-fn
-    :accessor item-valuation-fn)
-   (balancing-account
-    :type     (or null account)
+   (market-balancing-account
+    :type     (or null account list)
     :initarg  :balancing-account
-    :accessor item-balancing-account))
-  (:documentation "Individual items are of class ITEM. They optionally have an item-class CLASS and a list of attributes ATTRIBUTES. COST represents the cost basis of the account where the item currently resides. It optionally has a VALUATION-FN to represent the current market value. (If it is not supplied, it is found according to the principle of subsidiarity.) It optionally has a BALANCING-ACCOUNT to post fluctuations of its market value in. Again, if not supplied, it is found according to the principle of subsidiarity. Item names must be unique, if they are supplied. Item cost is usually specified; however, if it is not (if only the cost of the lot is specified and the cost of the item cannot be inferred), it is an error for that item to be posted outside of its lot.")
-  (:default-initargs :name "" :class nil :attributes nil :valuation-fn nil :balancing-account nil))
+    :accessor item-market-balancing-account)
+   (p/l-balancing-account
+    :type     (or null account list)
+    :initarg  :p/l-balancing-account
+    :accessor item-p/l-balancing-account))
+  (:documentation "Individual items are of class ITEM. A NAME may help identify it (if date or lot isn't enough), but it isn't necessary. It must have an item-class CLASS. It may have a list of attributes corresponding to that class, ATTRIBUTES. COST represents the cost basis of the account where the item currently resides. Item cost is usually specified; however, if it is not (if only the cost of the lot is specified and the cost of the item cannot be inferred), it is an error for that item to be posted outside of its lot. MARKET-BALANCING-ACCOUNT and P/L-BALANCING-ACCOUNT, behave similarly for those to the commodity. They override those in the CLASS, if any.")
+  (:default-initargs :name                     ""
+		     :attributes               nil
+		     :cost                     nil
+		     :market-balancing-account nil
+		     :p/l-balancing-account    nil))
 
 (defclass lot ()
-  ((date-purchased
+  ((date-posted
     :type     date
     :initarg  :date
     :accessor lot-date-purchased)
@@ -111,7 +126,7 @@
     :type     amount
     :initarg  :cost
     :accessor lot-cost))
-  (:documentation "Lots represent collections of either items or a single quantity with a cost basis.")
+  (:documentation "Lots represent collections of either items or a single quantity with a cost basis. They may have  NAME if it is helpful for disambiguation purposes, but they must have a COST. The DATE-POSTED represents the date at which it was last updated (posted to an account, had part of it sold or divided, etc.)")
   (:default-initargs :name ""))
 
 (defclass item-lot ()
@@ -126,4 +141,4 @@
     :type     amount
     :initarg  :amount
     :accessor amount-lot-amount))
-  (:documentation "Holds individual amount lots (such as '40 MSFT @ $10')."))
+  (:documentation "Holds individual amount lots (such as '40 MSFT @ $10'. Here, 40 MSFT would be the AMOUNT and $10 the COST)."))

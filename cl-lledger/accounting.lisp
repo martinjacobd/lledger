@@ -15,14 +15,14 @@
 ;;; You should have received a copy of the GNU General Public License
 ;;; along with lledger.  If not, see <https://www.gnu.org/licenses/>.
 
-(defsystem "cl-lledger"
-  :description "hello-lisp: a sample Lisp system."
-  :version "development"
-  :author "Jacob Martin <martinjacobd@gmail.com>"
-  :licence "GPLv3"
-  :depends-on ("cl-ppcre")
-  :components ((:file "package")
-               (:file "utilities")
-	       (:file "accounting")
-               (:file "amounts")
-	       (:file "commodities")))
+(in-package #:cl-lledger)
+
+(defclass date ()
+  ((year
+    :type integer
+    :initarg :)))
+
+(defmacro choose-specific-alternative (&rest alternatives)
+  "From among a list of alternatives, ordered from the most specific to the least specific, returns the most specific non-NIL argument or an error if none are specified."
+  (or ,@alternatives
+      (error "Cannot find from among alternatives, defaults not specified.")))

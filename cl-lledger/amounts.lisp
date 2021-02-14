@@ -510,3 +510,28 @@
 		  (if (eql positive-type :debit)
 		      (balance-credit-balance balance)
 		      (balance-debit-balance  balance)))))
+
+(defgeneric amount-print (amount &key
+				   positive-type
+				   display-position
+				   thousands-separator
+				   decimal-separator
+				   negative-style)
+  (:documentation "Prints the value of AMOUNT according to its commodity representation or the amounts given as more general representation defaults given as arguments, if the commodity representation preferances are null."))
+
+(defmethod amount-print ((amount amount) &key
+					   positive-type
+					   display-position
+					   thousands-separator
+					   decimal-separator
+					   negative-style)
+  (let ((commodity (amount-commodity amount)))
+    (let ((display-position    (choose-specific-alternative (commodity-display-position commodity)
+							    display-position))
+	  (thousands-separator (choose-specific-alternative (commodity-thousands-separator commodity)
+							    thousands-separator))
+	  (decimal-separator   (choose-specific-alternative (commodity-decimal-separator commodity)
+							    decimal-separator))
+	  (negative-style      (choose-specific-alternative (commodity-negative-style commodity)
+							    negative-style))))
+    (format t "")))
